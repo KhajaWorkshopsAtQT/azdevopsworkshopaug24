@@ -16,8 +16,8 @@ stages:
   displayName: Build image
   jobs:
 
-  - job: Build
-    displayName: Build
+  - job: scan
+    displayName: Scan For Security Issues
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -25,10 +25,28 @@ stages:
       inputs:
         cwd: '$(System.DefaultWorkingDirectory)'
         projectName: 'nopcommerce'
+  - job: build
+    displayName: BuildDockerImage
+    pool: Default
+    steps:
     - task: Docker@2
       displayName: Build an image
       inputs:
-        command: build
+        containerRegistry: DOCKER_HUB
+        command: buildAndPush
+        repository: shaikkhajaibrahim/nopforworkshopjuly24
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        tags: |
-          $(tag)
+        tags: 'latest'
+    - bash: 'trivy image shaikkhajaibrahim/nopforworkshopjuly24:latest'
+  - job: deploy
+    displayName: 'Deployment'
+    dependsOn: build
+    pool: Default
+    steps:
+      - bash: 'terraform init && terraform apply -auto-approve'
+        displayName: 'Create k8s cluster'
+        workingDirectory: 'Deploy/terraform'
+      - bash: 'kubectl apply -f Deploy/k8s'
+        displayName: 'Deploy application'
+      - bash: 'trivy k8s --report=summary'
+        displayName: 'Scan k8s'
